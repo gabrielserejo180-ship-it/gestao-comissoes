@@ -2177,8 +2177,8 @@ function cruzar(p1, p2) {
             pagas = docP1.pagas || 0;
             aVista = docP1.aVista || false;
             if (docP1.emissoes && docP1.emissoes.length > 0) {
-              emissao = toDateStr(docP1.emissoes[0].emissao);
-              vencimento = toDateStr(docP1.emissoes[docP1.emissoes.length - 1].venc);
+              emissao = _toDateStr(docP1.emissoes[0].emissao);
+              vencimento = _toDateStr(docP1.emissoes[docP1.emissoes.length - 1].venc);
             }
           }
         }
