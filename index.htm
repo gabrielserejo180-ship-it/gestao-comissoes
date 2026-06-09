@@ -2065,13 +2065,12 @@ function parsePlanilha1(rows) {
     if (emissao && venc) entry.emissoes.push({ emissao, venc });
   }
 
-  function toDateStr(v) { return _toDateStr(v); }
 
   for (const cn in result) {
     for (const db in result[cn].docs) {
       const e = result[cn].docs[db];
       e.aVista = e.maxParcela <= 1 && e.emissoes.length > 0 &&
-        toDateStr(e.emissoes[0].emissao) === toDateStr(e.emissoes[0].venc);
+        _toDateStr(e.emissoes[0].emissao) === _toDateStr(e.emissoes[0].venc);
     }
   }
 
