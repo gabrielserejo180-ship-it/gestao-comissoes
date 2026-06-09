@@ -1762,6 +1762,17 @@
             <button class="filtro-acao-btn" onclick="selRelatorio(false)">Limpar</button>
           </div>
           <div id="relatorioCheckList" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:20px"></div>
+          <div style="margin-bottom:16px">
+            <div style="font-family:IBM Plex Mono,monospace;font-size:0.6rem;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Tipo de relatório</div>
+            <div style="display:flex;gap:8px">
+              <label style="display:flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:0.8rem;color:var(--text2)">
+                <input type="radio" name="tipoRelatorio" value="detalhado" checked style="accent-color:var(--accent)"> Detalhado
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:0.8rem;color:var(--text2)">
+                <input type="radio" name="tipoRelatorio" value="resumido" style="accent-color:var(--accent)"> Resumido
+              </label>
+            </div>
+          </div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button class="btn-ghost" onclick="fecharModalRelatorio()">Cancelar</button>
             <button class="btn-primary" onclick="gerarPDF()">
@@ -2149,7 +2160,7 @@ function cruzar(p1, p2) {
 
       for (const docBase in cliP2.docs) {
         const pecas = cliP2.docs[docBase];
-        let parcelas = 1, pagas = 0, aVista = false;
+        let parcelas = 1, pagas = 0, aVista = false, emissao = '', vencimento = '';
 
         if (cliP1) {
           const docP1 = cliP1.docs[docBase] || encontrarChaveNorm(cliP1.docs, normalizar(docBase));
@@ -2157,6 +2168,10 @@ function cruzar(p1, p2) {
             parcelas = docP1.maxParcela || 1;
             pagas = docP1.pagas || 0;
             aVista = docP1.aVista || false;
+            if (docP1.emissoes && docP1.emissoes.length > 0) {
+              emissao = toDateStr(docP1.emissoes[0].emissao);
+              vencimento = toDateStr(docP1.emissoes[docP1.emissoes.length - 1].venc);
+            }
           }
         }
 
@@ -2164,8 +2179,6 @@ function cruzar(p1, p2) {
 
         let totalCompra = 0;
         const pecasCalc = pecas.map(p => {
-          // Se valor zero, comissão é zero (sem divisão)
-          // Senão: divide pelo total de parcelas e multiplica pelas pagas
           const comissao = (p.valorComissao === 0 || parcelas === 0)
             ? 0
             : (p.valorComissao / parcelas) * pagas;
@@ -2174,7 +2187,7 @@ function cruzar(p1, p2) {
           return { ...p, parcelas, pagas, porParcela, comissao };
         });
 
-        resultado[vendedor].clientes[nomeCliente].compras.push({ docBase, parcelas, pagas, aVista, pecas: pecasCalc, totalCompra });
+        resultado[vendedor].clientes[nomeCliente].compras.push({ docBase, parcelas, pagas, aVista, emissao, vencimento, pecas: pecasCalc, totalCompra });
         resultado[vendedor].clientes[nomeCliente].totalComissao += totalCompra;
       }
 
@@ -2749,6 +2762,9 @@ function gerarPDF() {
     .resumo-val.green { color:#166534; }
     .resumo-val.orange { color:#854d0e; }
     .resumo-val.red { color:#991b1b; }
+    .cli-resumido { display:flex; justify-content:space-between; align-items:center; padding: 10px 16px; flex-wrap:wrap; gap:8px; }
+    .cli-resumido-nome { font-size:0.82rem; font-weight:700; color:#334155; }
+    .cli-resumido-pills { display:flex; gap:6px; flex-wrap:wrap; }
     .footer { margin-top:32px; border-top:1px solid #e2e8f0; padding-top:12px; font-size:0.65rem; color:#94a3b8; display:flex; justify-content:space-between; }
     @media print { body { padding:16px; } }
   </style></head><body>
@@ -2762,6 +2778,8 @@ function gerarPDF() {
 
   let totalGeralComissao = 0, totalGeralRepassado = 0, totalGeralARepassar = 0, totalGeralAberto = 0;
 
+  const tipoRel = document.querySelector('input[name="tipoRelatorio"]:checked')?.value || 'detalhado';
+
   selecionados.forEach(vend => {
     const dados = resultadoGlobal[vend];
     let vendComissao = 0, vendRepassado = 0, vendARepassar = 0, vendAberto = 0;
@@ -2769,41 +2787,68 @@ function gerarPDF() {
     let cliHTML = '';
     for (const cli in dados.clientes) {
       const cliData = dados.clientes[cli];
-      let docRows = '';
 
-      cliData.compras.forEach(compra => {
-        const valPorParcela = compra.totalCompra / (compra.parcelas || 1);
-        for (let i = 1; i <= compra.parcelas; i++) {
-          const key = repasseKey(vend, cli, compra.docBase) + '|||' + i;
-          const foiRepassado = !!repasseState[key];
-          // parcela paga pelo cliente se i <= compra.pagas
-          const clientePagou = i <= compra.pagas;
-          let status, tagClass, tagLabel;
-          if (foiRepassado) {
-            status = 'repassado'; tagClass = 'tag-pago'; tagLabel = 'Repassado';
-            vendRepassado += valPorParcela;
-          } else if (clientePagou) {
-            status = 'arepassar'; tagClass = 'tag-arepassar'; tagLabel = 'A Repassar';
-            vendARepassar += valPorParcela;
-          } else {
-            status = 'aberto'; tagClass = 'tag-aberto'; tagLabel = 'Em Aberto';
-            vendAberto += valPorParcela;
+      if (tipoRel === 'resumido') {
+        // ── RESUMIDO: totais por cliente ──
+        let cliRepassado = 0, cliARepassar = 0, cliAberto = 0;
+        cliData.compras.forEach(compra => {
+          const valPorParcela = compra.totalCompra / (compra.parcelas || 1);
+          for (let i = 1; i <= compra.parcelas; i++) {
+            const key = repasseKey(vend, cli, compra.docBase) + '|||' + i;
+            if (repasseState[key]) { cliRepassado += valPorParcela; vendRepassado += valPorParcela; }
+            else if (i <= compra.pagas) { cliARepassar += valPorParcela; vendARepassar += valPorParcela; }
+            else { cliAberto += valPorParcela; vendAberto += valPorParcela; }
+            vendComissao += valPorParcela;
           }
-          vendComissao += valPorParcela;
-          docRows += `<tr>
-            <td>${compra.docBase}</td>
-            <td>${i}/${compra.parcelas}</td>
-            <td>${fmtPDF(valPorParcela)}</td>
-            <td><span class="tag ${tagClass}">${tagLabel}</span></td>
-          </tr>`;
-        }
-      });
-
-      cliHTML += `<div class="cli-block">
-        <div class="cli-header"><span>${cli}</span><span>${cliData.compras.length} compra${cliData.compras.length !== 1 ? 's' : ''}</span></div>
-        <table><thead><tr><th>Documento</th><th>Parcela</th><th>Valor</th><th>Situação</th></tr></thead>
-        <tbody>${docRows}</tbody></table>
-      </div>`;
+        });
+        cliHTML += `<div class="cli-block">
+          <div class="cli-resumido">
+            <span class="cli-resumido-nome">${cli}</span>
+            <div class="cli-resumido-pills">
+              ${cliRepassado > 0 ? `<span class="tag tag-pago">Repassado: ${fmtPDF(cliRepassado)}</span>` : ''}
+              ${cliARepassar > 0 ? `<span class="tag tag-arepassar">A Repassar: ${fmtPDF(cliARepassar)}</span>` : ''}
+              ${cliAberto > 0 ? `<span class="tag tag-aberto">Em Aberto: ${fmtPDF(cliAberto)}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      } else {
+        // ── DETALHADO: por documento/parcela com emissão e vencimento ──
+        let docRows = '';
+        cliData.compras.forEach(compra => {
+          const valPorParcela = compra.totalCompra / (compra.parcelas || 1);
+          for (let i = 1; i <= compra.parcelas; i++) {
+            const key = repasseKey(vend, cli, compra.docBase) + '|||' + i;
+            const foiRepassado = !!repasseState[key];
+            const clientePagou = i <= compra.pagas;
+            let tagClass, tagLabel;
+            if (foiRepassado) {
+              tagClass = 'tag-pago'; tagLabel = 'Repassado';
+              vendRepassado += valPorParcela;
+            } else if (clientePagou) {
+              tagClass = 'tag-arepassar'; tagLabel = 'A Repassar';
+              vendARepassar += valPorParcela;
+            } else {
+              tagClass = 'tag-aberto'; tagLabel = 'Em Aberto';
+              vendAberto += valPorParcela;
+            }
+            vendComissao += valPorParcela;
+            docRows += `<tr>
+              <td>${compra.docBase}</td>
+              <td>${i}/${compra.parcelas}</td>
+              <td>${compra.emissao || '-'}</td>
+              <td>${compra.vencimento || '-'}</td>
+              <td>${fmtPDF(compra.totalCompra)}</td>
+              <td>${fmtPDF(valPorParcela)}</td>
+              <td><span class="tag ${tagClass}">${tagLabel}</span></td>
+            </tr>`;
+          }
+        });
+        cliHTML += `<div class="cli-block">
+          <div class="cli-header"><span>${cli}</span><span>${cliData.compras.length} compra${cliData.compras.length !== 1 ? 's' : ''}</span></div>
+          <table><thead><tr><th>Documento</th><th>Parcela</th><th>Emissão</th><th>Vencimento</th><th>Valor Compra</th><th>Valor Parcela</th><th>Situação</th></tr></thead>
+          <tbody>${docRows}</tbody></table>
+        </div>`;
+      }
     }
 
     totalGeralComissao += vendComissao;
