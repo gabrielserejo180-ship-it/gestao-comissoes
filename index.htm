@@ -5,18 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comissões — Sistema de Gestão</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
-// Verifica se XLSX carregou e adiciona diagnóstico
-window.addEventListener('load', function() {
-  if (typeof XLSX === 'undefined') {
-    document.body.insertAdjacentHTML('afterbegin',
-      '<div style="background:#D0151C;color:#fff;padding:12px 20px;text-align:center;font-weight:700;position:fixed;top:0;left:0;right:0;z-index:9999">' +
-      '⚠️ Erro: biblioteca não carregou. Verifique sua conexão com a internet e recarregue a página.' +
-      '</div>'
-    );
-  }
-});
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1607,9 +1595,8 @@ window.addEventListener('load', function() {
   </div>
 
   <div class="upload-zone">
-    <input type="file" id="file1" accept=".xlsx,.xls" style="display:none" onchange="carregarUmArquivo(this, 1)">
-    <input type="file" id="file2" accept=".xlsx,.xls" style="display:none" onchange="carregarUmArquivo(this, 2)">
-    <label for="file1" class="upload-card" id="card1" style="cursor:pointer;display:block">
+    <div class="upload-card" id="card1">
+      <input type="file" id="file1" accept=".xlsx,.xls" multiple onchange="carregarArquivos(this)">
       <div class="upload-inner">
         <div class="upload-icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" color="#3b82f6">
@@ -1618,39 +1605,22 @@ window.addEventListener('load', function() {
           </svg>
         </div>
         <div class="upload-text-group">
-          <div class="upload-tag">Planilha 1</div>
-          <div class="upload-heading">Recebimentos / Parcelas</div>
-          <div class="upload-sub">Toque para selecionar o arquivo COMISSAO_DP</div>
+          <div class="upload-tag">Importar Planilhas</div>
+          <div class="upload-heading">Selecionar os dois arquivos</div>
+          <div class="upload-sub">Segure Ctrl para selecionar ambas as planilhas de uma só vez. O sistema identifica automaticamente cada arquivo.</div>
         </div>
       </div>
       <div class="upload-status-list">
         <div class="upload-status-item" id="status1">
           <div class="status-dot"></div>
-          <span id="status1-text">Nenhum arquivo selecionado</span>
+          <span id="status1-text"></span>
         </div>
-      </div>
-    </label>
-    <label for="file2" class="upload-card" id="card2" style="cursor:pointer;display:block">
-      <div class="upload-inner">
-        <div class="upload-icon-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" color="#8b5cf6">
-            <path d="M12 16V8m0 0l-3 3m3-3l3 3"/>
-            <path d="M20 16.7A5 5 0 0018 7h-1.26A8 8 0 104 15.25"/>
-          </svg>
-        </div>
-        <div class="upload-text-group">
-          <div class="upload-tag" style="color:#8b5cf6;border-color:rgba(139,92,246,0.3)">Planilha 2</div>
-          <div class="upload-heading">Produtos / Comissões</div>
-          <div class="upload-sub">Toque para selecionar o arquivo DP</div>
-        </div>
-      </div>
-      <div class="upload-status-list">
         <div class="upload-status-item" id="status2">
           <div class="status-dot"></div>
-          <span id="status2-text">Nenhum arquivo selecionado</span>
+          <span id="status2-text"></span>
         </div>
       </div>
-    </label>
+    </div>
 
     <div class="upload-card" id="cardRepasse" style="border-style:dashed;opacity:0.7" title="Opcional — carrega repasses anteriores">
       <input type="file" id="fileRepasse" accept=".xlsx,.xls" onchange="carregarPlanilhaRepasse(this)">
@@ -1940,124 +1910,58 @@ function carregarPlanilhaRepasse(input) {
 }
 
 function identificarPlanilha(raw) {
-  const amostra = raw.slice(0, 20).map(r => Array.isArray(r) ? r.join(' ') : String(r)).join(' ').toLowerCase();
-  // Planilha 2 (Produtos/Comissões): tem "funcionário" ou "vendedor"
-  if (/funcion[aá]rio|vendedor/.test(amostra)) return 2;
-  // Planilha 1 (Recebimentos): tem "pessoa" ou "cliente" + "documento" ou "parcela" ou "vencimento"
-  if ((amostra.includes('pessoa') || amostra.includes('cliente') || amostra.includes('nome')) &&
-      (amostra.includes('documento') || amostra.includes('parcela') || amostra.includes('vencimento'))) return 1;
-  // Segunda tentativa: planilha 1 tem nomes de colunas de recebimento
-  if (amostra.includes('recebimento') || amostra.includes('duplicata') || amostra.includes('boleto')) return 1;
-  // Segunda tentativa: planilha 2 tem comissão ou produto
-  if (amostra.includes('comiss') || amostra.includes('produto') || amostra.includes('fabricante')) return 2;
+  const amostra = raw.slice(0, 15).map(r => r.join(' ')).join(' ').toLowerCase();
+  if (/funcion[aá]rio\s*:|vendedor\s*:/.test(amostra)) return 2;
+  if (amostra.includes('pessoa') && (amostra.includes('documento') || amostra.includes('parcela'))) return 1;
   return null;
 }
 
-function carregarUmArquivo(input, slot) {
-  const file = input.files[0];
-  if (!file) return;
+function carregarArquivos(input) {
+  const files = Array.from(input.files);
+  if (files.length === 0) return;
+  if (files.length > 2) { mostrarErro('⚠️ Selecione apenas as duas planilhas.'); return; }
+
   ocultarErro();
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
+  dados1 = null; dados2 = null;
+  document.getElementById('status1').classList.remove('visible');
+  document.getElementById('status2').classList.remove('visible');
+  document.getElementById('btnCalcular').disabled = true;
+  document.getElementById('card1').classList.remove('loaded');
+
+  let processados = 0;
+
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
       const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       const tipo = identificarPlanilha(raw);
 
       if (tipo === null) {
-        const amostra = raw.slice(0, 3).map(r => Array.isArray(r) ? r.slice(0,5).join(' | ') : r).join(' / ');
-        mostrarErro('⚠️ Não foi possível identificar "' + file.name + '". Conteúdo: ' + amostra.slice(0, 200));
+        mostrarErro('⚠️ Não foi possível identificar o arquivo "' + file.name + '". Verifique se é uma das planilhas corretas.');
         return;
       }
 
       if (tipo === 1) {
         dados1 = raw;
-        document.getElementById('status1-text').textContent = file.name + ' ✓';
+        document.getElementById('status1-text').textContent = file.name + ' — Recebimentos / Parcelas';
         document.getElementById('status1').classList.add('visible');
-        document.getElementById('card1').classList.add('loaded');
       } else {
         dados2 = raw;
-        document.getElementById('status2-text').textContent = file.name + ' ✓';
+        document.getElementById('status2-text').textContent = file.name + ' — Produtos / Comissões';
         document.getElementById('status2').classList.add('visible');
-        document.getElementById('card2').classList.add('loaded');
       }
 
-      if (dados1 && dados2) {
-        document.getElementById('btnCalcular').disabled = false;
+      processados++;
+      if (processados === files.length) {
+        if (dados1 && dados2) {
+          document.getElementById('card1').classList.add('loaded');
+          document.getElementById('btnCalcular').disabled = false;
+        } else if (files.length === 2) {
+          mostrarErro('⚠️ Os dois arquivos parecem ser do mesmo tipo. Selecione uma planilha de cada tipo.');
+        }
       }
-    } catch(err) {
-      mostrarErro('⚠️ Erro ao processar "' + file.name + '": ' + err.message);
-    }
-  };
-  reader.onerror = () => mostrarErro('⚠️ Erro ao ler "' + file.name + '".');
-  reader.readAsArrayBuffer(file);
-}
-
-function carregarArquivos(input) {
-  const files = Array.from(input.files);
-  if (files.length === 0) return;
-  if (files.length > 2) { mostrarErro('⚠️ Selecione no máximo duas planilhas.'); return; }
-
-  ocultarErro();
-
-  // Se for apenas 1 arquivo, mantém o que já foi carregado do outro tipo
-  if (files.length === 1) {
-    // não reseta dados1/dados2 — deixa acumular
-  } else {
-    // 2 arquivos: reseta tudo
-    dados1 = null; dados2 = null;
-    document.getElementById('status1').classList.remove('visible');
-    document.getElementById('status2').classList.remove('visible');
-    document.getElementById('card1').classList.remove('loaded');
-  }
-
-  document.getElementById('btnCalcular').disabled = true;
-  let processados = 0;
-
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        const tipo = identificarPlanilha(raw);
-
-        if (tipo === null) {
-          const amostra = raw.slice(0, 3).map(r => Array.isArray(r) ? r.slice(0,5).join(' | ') : r).join(' / ');
-          mostrarErro('⚠️ Não foi possível identificar "' + file.name + '". Conteúdo: ' + amostra.slice(0, 200));
-          return;
-        }
-
-        if (tipo === 1) {
-          dados1 = raw;
-          document.getElementById('status1-text').textContent = file.name + ' ✓ Recebimentos / Parcelas';
-          document.getElementById('status1').classList.add('visible');
-        } else {
-          dados2 = raw;
-          document.getElementById('status2-text').textContent = file.name + ' ✓ Produtos / Comissões';
-          document.getElementById('status2').classList.add('visible');
-        }
-
-        processados++;
-        if (processados === files.length) {
-          if (dados1 && dados2) {
-            document.getElementById('card1').classList.add('loaded');
-            document.getElementById('btnCalcular').disabled = false;
-          } else if (files.length === 2) {
-            mostrarErro('⚠️ Os dois arquivos parecem ser do mesmo tipo. Selecione uma planilha de recebimentos e uma de comissões.');
-          } else {
-            // 1 arquivo carregado, aguarda o segundo
-            mostrarErro('✅ Planilha carregada! Agora selecione a outra planilha.');
-          }
-        }
-      } catch(err) {
-        mostrarErro('⚠️ Erro ao processar "' + file.name + '": ' + err.message);
-      }
-    };
-    reader.onerror = function() {
-      mostrarErro('⚠️ Erro ao ler o arquivo "' + file.name + '". Tente novamente.');
     };
     reader.readAsArrayBuffer(file);
   });
@@ -2515,91 +2419,80 @@ function carregarArquivosMensal(input) {
 function gerarRelatorioMensal() {
   if (!arquivosMensais.length) return;
 
-  // Agrupa por representante somando valores
-  const totais = {}; // { vend: { total, periodos: Set } }
+  const totais = {};
   arquivosMensais.forEach(arq => {
-    arq.rows.slice(1).forEach(row => {
-      const vend  = String(row[0] || '').trim();
-      const valor = parseFloat(String(row[4] || '0').replace(',', '.')) || 0;
-      const periodo = String(row[5] || '').trim(); // coluna período
-      if (!vend) return;
-      if (!totais[vend]) totais[vend] = { total: 0, periodos: new Set() };
-      totais[vend].total += valor;
-      if (periodo) totais[vend].periodos.add(periodo);
+    arq.dados.forEach(row => {
+      const vend = row['REPRESENTANTE'] || '';
+      if (!vend || vend === 'TOTAL GERAL') return;
+      if (!totais[vend]) totais[vend] = { repassado: 0, aRepassar: 0, emAberto: 0, periodos: new Set() };
+      totais[vend].repassado += parseFloat(String(row['REPASSADO (R$)'] || 0).replace(',','.')) || 0;
+      totais[vend].aRepassar += parseFloat(String(row['A REPASSAR (R$)'] || 0).replace(',','.')) || 0;
+      totais[vend].emAberto += parseFloat(String(row['EM ABERTO (R$)'] || 0).replace(',','.')) || 0;
+      if (arq.periodo) totais[vend].periodos.add(arq.periodo);
     });
   });
 
-  // Descobre o período dos arquivos
-  const todosPeriodos = new Set();
-  Object.values(totais).forEach(t => t.periodos.forEach(p => todosPeriodos.add(p)));
-  const periodoTitulo = [...todosPeriodos].join(' + ') || 'Período não identificado';
+  const doc = document.implementation.createHTMLDocument('Relatório Mensal');
+  const metaCharset = doc.createElement('meta');
+  metaCharset.setAttribute('charset', 'utf-8');
+  doc.head.appendChild(metaCharset);
+  const style = doc.createElement('style');
+  style.textContent = "body{font-family:'Segoe UI',Arial,sans-serif;padding:32px;font-size:13px;color:#1a1a1a}"
+    + ' h2{color:#D0151C;margin-bottom:16px}'
+    + ' table{width:100%;border-collapse:collapse}'
+    + ' th{background:#1a1a1a;color:#fff;padding:8px 12px;text-align:left;font-size:0.7rem;text-transform:uppercase}'
+    + ' td{padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:0.8rem}'
+    + ' tr:nth-child(even) td{background:#f9fafb}'
+    + ' .total{font-weight:700;background:#f3f4f6!important}'
+    + ' .green{color:#166534} .orange{color:#854d0e} .red{color:#991b1b}';
+  doc.head.appendChild(style);
 
-  const dataHoje = new Date().toLocaleDateString('pt-BR');
-  let totalGeral = 0;
-  let linhas = '';
+  const h2 = doc.createElement('h2');
+  h2.textContent = 'Relatório Mensal de Comissões';
+  doc.body.appendChild(h2);
 
-  Object.entries(totais)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([vend, dados]) => {
-      totalGeral += dados.total;
-      linhas += `<tr>
-        <td style="font-size:0.82rem;color:#1e3a5f;font-weight:600;padding:10px 16px">${vend}</td>
-        <td style="font-size:0.82rem;color:#166534;font-weight:700;padding:10px 16px;text-align:right">${fmtPDF(dados.total)}</td>
-      </tr>`;
-    });
+  const sub = doc.createElement('p');
+  sub.style.cssText = 'font-size:0.75rem;color:#6b7280;margin-bottom:20px';
+  sub.textContent = 'Períodos: ' + arquivosMensais.map(a => a.periodo).join(', ') + ' · Emitido em ' + new Date().toLocaleDateString('pt-BR');
+  doc.body.appendChild(sub);
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: Arial, sans-serif; color: #1a1a2e; background:#fff; padding:32px; }
-    .header { border-bottom:3px solid #1e3a5f; padding-bottom:16px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:flex-end; }
-    .header-title { font-size:1.4rem; font-weight:800; color:#1e3a5f; }
-    .header-sub { font-size:0.72rem; color:#666; margin-top:4px; }
-    .periodo-badge { background:#1e3a5f; color:#fff; padding:6px 14px; border-radius:8px; font-size:0.78rem; font-weight:700; }
-    table { width:100%; border-collapse:collapse; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; }
-    thead { background:#1e3a5f; }
-    th { color:#fff; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; padding:12px 16px; text-align:left; }
-    th:last-child { text-align:right; }
-    tr:nth-child(even) { background:#f8fafc; }
-    .total-row { background:#1e3a5f !important; }
-    .total-row td { color:#fff; font-weight:800; font-size:0.9rem; padding:14px 16px; }
-    .total-row td:last-child { text-align:right; color:#86efac; }
-    .footer { margin-top:24px; font-size:0.65rem; color:#94a3b8; display:flex; justify-content:space-between; }
-    @media print { body { padding:16px; } }
-  </style></head><body>
-  <div class="header">
-    <div>
-      <div class="header-title">Relatório Mensal de Repasses</div>
-      <div class="header-sub">Alvorada Motocicletas — Sistema de Gestão de Comissões</div>
-    </div>
-    <div style="text-align:right">
-      <div class="periodo-badge">${periodoTitulo}</div>
-      <div style="font-size:0.65rem;color:#666;margin-top:6px">Emitido em ${dataHoje}</div>
-    </div>
-  </div>
-  <table>
-    <thead><tr><th>Representante</th><th style="text-align:right">Total Repassado</th></tr></thead>
-    <tbody>
-      ${linhas}
-      <tr class="total-row">
-        <td>TOTAL GERAL</td>
-        <td>${fmtPDF(totalGeral)}</td>
-      </tr>
-    </tbody>
-  </table>
-  <div class="footer">
-    <span>Alvorada Motocicletas &mdash; Relatório de Comissões</span>
-    <div class="footer-line"></div>
-    <span>Gerado em ${dataHoje}</span>
-  </div>
-  </body></html>`;
+  const table = doc.createElement('table');
+  const thead = doc.createElement('thead');
+  thead.innerHTML = '<tr><th>Representante</th><th>Repassado</th><th>A Repassar</th><th>Em Aberto</th><th>Total</th></tr>';
+  table.appendChild(thead);
 
-  document.getElementById('modalRelMensal').style.display = 'none';
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
-  setTimeout(() => win.print(), 500);
+  const tbody = doc.createElement('tbody');
+  let totR = 0, totA = 0, totE = 0;
+  Object.entries(totais).sort((a,b) => a[0].localeCompare(b[0])).forEach(([vend, v]) => {
+    const total = v.repassado + v.aRepassar + v.emAberto;
+    totR += v.repassado; totA += v.aRepassar; totE += v.emAberto;
+    const tr = doc.createElement('tr');
+    tr.innerHTML = '<td>' + vend + '</td>'
+      + '<td class="green">' + fmtPDF(v.repassado) + '</td>'
+      + '<td class="orange">' + fmtPDF(v.aRepassar) + '</td>'
+      + '<td class="red">' + fmtPDF(v.emAberto) + '</td>'
+      + '<td>' + fmtPDF(total) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  const trTotal = doc.createElement('tr');
+  trTotal.className = 'total';
+  trTotal.innerHTML = '<td>TOTAL GERAL</td>'
+    + '<td class="green">' + fmtPDF(totR) + '</td>'
+    + '<td class="orange">' + fmtPDF(totA) + '</td>'
+    + '<td class="red">' + fmtPDF(totE) + '</td>'
+    + '<td>' + fmtPDF(totR + totA + totE) + '</td>';
+  tbody.appendChild(trTotal);
+  table.appendChild(tbody);
+  doc.body.appendChild(table);
+
+  const serializer = new XMLSerializer();
+  const htmlStr = '<!DOCTYPE html>' + serializer.serializeToString(doc);
+  const blob = new Blob([new TextEncoder().encode(htmlStr)], {type: 'text/html;charset=utf-8'});
+  const win = window.open(URL.createObjectURL(blob), '_blank');
+  setTimeout(() => { if(win) win.print(); }, 800);
 }
+
 
 function abrirModalSuporte() {
   document.getElementById('modalSuporteOverlay').style.display = 'flex';
@@ -3008,148 +2901,78 @@ function selRelatorio(val) {
 }
 
 function gerarPDF() {
-  const selecionados = Array.from(document.querySelectorAll('#relatorioCheckList input[type=checkbox]:checked')).map(cb => cb.dataset.vend);
-  if (selecionados.length === 0) { alert('Selecione ao menos um representante.'); return; }
-  fecharModalRelatorio();
-
+  const selecionados = Array.from(document.querySelectorAll('#relatorioCheckList input[type=checkbox]:checked'))
+    .map(cb => cb.dataset.vend).filter(Boolean);
+  if (!selecionados.length) { alert('Selecione ao menos um representante.'); return; }
+  const tipoRel = document.querySelector('input[name="tipoRelatorio"]:checked')?.value || 'detalhado';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
-  let html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; background:#fff; padding:36px; font-size:13px; }
 
-    /* ── CABEÇALHO ── */
-    .header {
-      border-bottom: 4px solid #D0151C;
-      padding-bottom: 16px;
-      margin-bottom: 28px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-    }
-    .header-left { }
-    .header-title { font-size: 1.3rem; font-weight: 800; color: #D0151C; letter-spacing: 0.3px; }
-    .header-sub { font-size: 0.7rem; color: #555; margin-top: 4px; }
-    .header-right { text-align: right; }
-    .header-date { font-size: 0.68rem; color: #777; }
-    .header-badge {
-      display: inline-block;
-      background: #D0151C;
-      color: #fff;
-      font-size: 0.65rem;
-      font-weight: 700;
-      padding: 3px 10px;
-      border-radius: 12px;
-      margin-top: 6px;
-      letter-spacing: 0.5px;
-    }
+  // Monta CSS separado (sem tags HTML no JS)
+  const css = [
+    '* { margin:0; padding:0; box-sizing:border-box; }',
+    "body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; background:#fff; padding:36px; font-size:13px; }",
+    '.header { border-bottom: 4px solid #D0151C; padding-bottom: 16px; margin-bottom: 28px; display:flex; justify-content:space-between; align-items:flex-end; }',
+    '.header-title { font-size:1.3rem; font-weight:800; color:#D0151C; }',
+    '.header-sub { font-size:0.72rem; color:#555; margin-top:4px; }',
+    '.header-date { font-size:0.7rem; color:#666; text-align:right; }',
+    '.rep-block { margin-bottom:24px; page-break-inside:avoid; border:1px solid #e5e7eb; border-radius:6px; overflow:hidden; }',
+    '.rep-header { background:#1a1a1a; color:#fff; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; }',
+    '.rep-name { font-size:0.88rem; font-weight:700; }',
+    '.rep-totais { display:flex; gap:18px; font-size:0.68rem; }',
+    '.rep-totais strong { color:#86efac; }',
+    '.cli-block { border-top:1px solid #e5e7eb; }',
+    '.cli-header { background:#f9fafb; padding:7px 16px; font-size:0.74rem; font-weight:600; color:#374151; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; }',
+    'table { width:100%; border-collapse:collapse; }',
+    'th { background:#f3f4f6; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.8px; color:#6b7280; padding:7px 12px; text-align:left; border-bottom:1px solid #e5e7eb; }',
+    'td { font-size:0.71rem; padding:7px 12px; border-bottom:1px solid #f3f4f6; color:#374151; }',
+    'tr:last-child td { border-bottom:none; }',
+    'tr:nth-child(even) td { background:#fafafa; }',
+    '.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.58rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }',
+    '.tag-pago { background:#dcfce7; color:#166534; }',
+    '.tag-arepassar { background:#fef9c3; color:#854d0e; }',
+    '.tag-aberto { background:#fee2e2; color:#991b1b; }',
+    '.resumo-total { background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:14px 20px; margin-top:16px; display:flex; gap:32px; flex-wrap:wrap; }',
+    '.resumo-cell { display:flex; flex-direction:column; gap:3px; }',
+    '.resumo-label { font-size:0.58rem; text-transform:uppercase; letter-spacing:0.8px; color:#6b7280; }',
+    '.resumo-val { font-size:0.9rem; font-weight:800; }',
+    '.resumo-val.green { color:#166534; }',
+    '.resumo-val.orange { color:#854d0e; }',
+    '.resumo-val.red { color:#991b1b; }',
+    '.cli-resumido { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; flex-wrap:wrap; gap:8px; }',
+    '.cli-resumido-nome { font-size:0.8rem; font-weight:700; color:#374151; }',
+    '.cli-resumido-pills { display:flex; gap:6px; flex-wrap:wrap; }',
+    '.footer { margin-top:32px; padding-top:12px; border-top:2px solid #D0151C; font-size:0.62rem; color:#9ca3af; display:flex; justify-content:space-between; }',
+    '@media print { body { padding:20px; } .rep-block { page-break-inside:avoid; } }'
+  ].join(' ');
 
-    /* ── REPRESENTANTE ── */
-    .rep-block { margin-bottom: 24px; page-break-inside: avoid; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-    .rep-header {
-      background: #1a1a1a;
-      color: #fff;
-      padding: 10px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .rep-name { font-size: 0.88rem; font-weight: 700; letter-spacing: 0.2px; }
-    .rep-totais { display:flex; gap:18px; font-size:0.67rem; }
-    .rep-totais span { opacity:0.75; }
-    .rep-totais strong { color:#86efac; }
+  // Monta HTML via DOM (sem template literal com tags)
+  const doc = document.implementation.createHTMLDocument('Relatório');
+  const metaCharset = doc.createElement('meta');
+  metaCharset.setAttribute('charset', 'utf-8');
+  doc.head.appendChild(metaCharset);
+  const styleEl = doc.createElement('style');
+  styleEl.textContent = css;
+  doc.head.appendChild(styleEl);
 
-    /* ── CLIENTE/TABELA ── */
-    .cli-block { border-top: 1px solid #e5e7eb; }
-    .cli-header {
-      background: #f9fafb;
-      padding: 7px 16px;
-      font-size: 0.74rem;
-      font-weight: 700;
-      color: #374151;
-      border-bottom: 1px solid #e5e7eb;
-      display: flex;
-      justify-content: space-between;
-    }
-    table { width: 100%; border-collapse: collapse; }
-    th {
-      background: #f3f4f6;
-      font-size: 0.58rem;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: #6b7280;
-      padding: 7px 12px;
-      text-align: left;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    td { font-size: 0.71rem; padding: 7px 12px; border-bottom: 1px solid #f3f4f6; color: #374151; }
-    tr:last-child td { border-bottom: none; }
-    tr:nth-child(even) td { background: #fafafa; }
+  // Cabeçalho
+  const header = doc.createElement('div');
+  header.className = 'header';
+  header.innerHTML = '<div class="header-left"><div class="header-title">Relatório de Repasses de Comissões</div><div class="header-sub">Alvorada Motocicletas · Sistema de Gestão de Comissões</div></div>'
+    + '<div class="header-right"><div class="header-date">Emitido em: ' + dataHoje + '<br>' + selecionados.length + ' representante' + (selecionados.length !== 1 ? 's' : '') + '</div></div>';
+  doc.body.appendChild(header);
 
-    /* ── TAGS ── */
-    .tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.58rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; }
-    .tag-pago     { background:#dcfce7; color:#166534; }
-    .tag-arepassar{ background:#fef9c3; color:#854d0e; }
-    .tag-aberto   { background:#fee2e2; color:#991b1b; }
+  let totalGeralComissao = 0, totalGeralRepassado = 0, totalGeralARepassar = 0, totalGeralAberto = 0;
 
-    /* ── RESUMO ── */
-    .resumo-total {
-      background: #fff8f8;
-      border: 1px solid #fecaca;
-      border-left: 4px solid #D0151C;
-      border-radius: 0 8px 8px 0;
-      padding: 14px 20px;
-      margin-top: 16px;
-      display: flex;
-      gap: 32px;
-      flex-wrap: wrap;
-    }
-    .resumo-cell { display:flex; flex-direction:column; gap:3px; }
-    .resumo-label { font-size:0.58rem; text-transform:uppercase; letter-spacing:0.8px; color:#6b7280; }
-    .resumo-val { font-size:0.9rem; font-weight:800; color:#1a1a1a; }
-    .resumo-val.green  { color:#166534; }
-    .resumo-val.orange { color:#854d0e; }
-    .resumo-val.red    { color:#991b1b; }
-
-    /* ── RESUMIDO ── */
-    .cli-resumido { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; flex-wrap:wrap; gap:8px; border-top:1px solid #e5e7eb; }
-    .cli-resumido-nome { font-size:0.8rem; font-weight:700; color:#374151; }
-    .cli-resumido-pills { display:flex; gap:6px; flex-wrap:wrap; }
-
-    /* ── FOOTER ── */
-    .footer {
-      margin-top: 32px;
-      padding-top: 12px;
-      border-top: 1px solid #e5e7eb;
-      font-size: 0.62rem;
-      color: #9ca3af;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .footer-line { width:40px; height:3px; background:#D0151C; border-radius:2px; }
-
-    @media print { body { padding:20px; } .rep-block { page-break-inside:avoid; } }
-  </style></head><body>
-    <div class="header">
-    <div class="header-left">
-      <div class="header-title">Relatório de Repasses de Comissões</div>
-      <div class="header-sub">Alvorada Motocicletas · Sistema de Gestão de Comissões</div>
-    </div>
-    <div class="header-right">
-      <div class="header-date">Emitido em: ${dataHoje}<br>${selecionados.length} representante${selecionados.length !== 1 ? 's' : ''}</div>
-    </div>
-  </div>
   selecionados.forEach(vend => {
     const dados = resultadoGlobal[vend];
+    if (!dados) return;
     let vendComissao = 0, vendRepassado = 0, vendARepassar = 0, vendAberto = 0;
-
     let cliHTML = '';
+
     for (const cli in dados.clientes) {
       const cliData = dados.clientes[cli];
 
       if (tipoRel === 'resumido') {
-        // ── RESUMIDO: totais por cliente ──
         let cliRepassado = 0, cliARepassar = 0, cliAberto = 0;
         cliData.compras.forEach(compra => {
           const valPorParcela = compra.totalCompra / (compra.parcelas || 1);
@@ -3157,24 +2980,17 @@ function gerarPDF() {
             const key = repasseKey(vend, cli, compra.docBase) + '|||' + i;
             if (repasseState[key]) { cliRepassado += valPorParcela; vendRepassado += valPorParcela; vendComissao += valPorParcela; }
             else if (i <= compra.pagas) { cliARepassar += valPorParcela; vendARepassar += valPorParcela; vendComissao += valPorParcela; }
-            else { cliAberto += valPorParcela; vendAberto += valPorParcela; /* Em Aberto: cliente não pagou */ }
+            else { cliAberto += valPorParcela; vendAberto += valPorParcela; }
           }
         });
-        cliHTML += `<div class="cli-block">
-          <div class="cli-resumido">
-            <span class="cli-resumido-nome">${cli}</span>
-            <div class="cli-resumido-pills">
-              ${cliRepassado > 0 ? `<span class="tag tag-pago">Repassado: ${fmtPDF(cliRepassado)}</span>` : ''}
-              ${cliARepassar > 0 ? `<span class="tag tag-arepassar">A Repassar: ${fmtPDF(cliARepassar)}</span>` : ''}
-              ${cliAberto > 0 ? `<span class="tag tag-aberto">Em Aberto: ${fmtPDF(cliAberto)}</span>` : ''}
-            </div>
-          </div>
-        </div>`;
+        cliHTML += '<div class="cli-block"><div class="cli-resumido"><span class="cli-resumido-nome">' + cli + '</span><div class="cli-resumido-pills">'
+          + (cliRepassado > 0 ? '<span class="tag tag-pago">Repassado: ' + fmtPDF(cliRepassado) + '</span>' : '')
+          + (cliARepassar > 0 ? '<span class="tag tag-arepassar">A Repassar: ' + fmtPDF(cliARepassar) + '</span>' : '')
+          + (cliAberto > 0 ? '<span class="tag tag-aberto">Em Aberto: ' + fmtPDF(cliAberto) + '</span>' : '')
+          + '</div></div></div>';
       } else {
-        // ── DETALHADO: por documento/parcela com emissão e vencimento ──
         let docRows = '';
         cliData.compras.forEach(compra => {
-          // valorBruto = valor total da compra (todas as peças, sem considerar parcelas pagas)
           const bruto = compra.valorBruto || 0;
           const valPorParcela = bruto / (compra.parcelas || 1);
           for (let i = 1; i <= compra.parcelas; i++) {
@@ -3182,39 +2998,27 @@ function gerarPDF() {
             const foiRepassado = !!repasseState[key];
             const clientePagou = i <= compra.pagas;
             let tagClass, tagLabel;
-            if (foiRepassado) {
-              tagClass = 'tag-pago'; tagLabel = 'Repassado';
-              vendRepassado += valPorParcela;
-              vendComissao += valPorParcela;
-            } else if (clientePagou) {
-              tagClass = 'tag-arepassar'; tagLabel = 'A Repassar';
-              vendARepassar += valPorParcela;
-              vendComissao += valPorParcela;
-            } else {
-              tagClass = 'tag-aberto'; tagLabel = 'Em Aberto';
-              vendAberto += valPorParcela; // acumula no total em aberto
-            }
-            // Em Aberto: cliente não pagou → valor parcela exibido = R$ 0,00
+            if (foiRepassado) { tagClass = 'tag-pago'; tagLabel = 'Repassado'; vendRepassado += valPorParcela; vendComissao += valPorParcela; }
+            else if (clientePagou) { tagClass = 'tag-arepassar'; tagLabel = 'A Repassar'; vendARepassar += valPorParcela; vendComissao += valPorParcela; }
+            else { tagClass = 'tag-aberto'; tagLabel = 'Em Aberto'; vendAberto += valPorParcela; }
             const valorExibir = tagClass === 'tag-aberto' ? 0 : valPorParcela;
-            const vencParc = compra.vencimentosPorParcela && compra.vencimentosPorParcela[i-1]
-              ? compra.vencimentosPorParcela[i-1]
-              : compra.vencimento || '-';
-            docRows += `<tr>
-              <td>${compra.docBase}</td>
-              <td>${i}/${compra.parcelas}</td>
-              <td>${compra.emissao || '-'}</td>
-              <td>${vencParc}</td>
-              <td>${fmtPDF(bruto)}</td>
-              <td>${fmtPDF(valorExibir)}</td>
-              <td><span class="tag ${tagClass}">${tagLabel}</span></td>
-            </tr>`;
+            const vencParc = compra.vencimentosPorParcela && compra.vencimentosPorParcela[i-1] ? compra.vencimentosPorParcela[i-1] : compra.vencimento || '-';
+            docRows += '<tr>'
+              + '<td>' + compra.docBase + '</td>'
+              + '<td>' + i + '/' + compra.parcelas + '</td>'
+              + '<td>' + (compra.emissao || '-') + '</td>'
+              + '<td>' + vencParc + '</td>'
+              + '<td>' + fmtPDF(bruto) + '</td>'
+              + '<td>' + fmtPDF(valorExibir) + '</td>'
+              + '<td><span class="tag ' + tagClass + '">' + tagLabel + '</span></td>'
+              + '</tr>';
           }
         });
-        cliHTML += `<div class="cli-block">
-          <div class="cli-header"><span>${cli}</span><span>${cliData.compras.length} compra${cliData.compras.length !== 1 ? 's' : ''}</span></div>
-          <table><thead><tr><th>Documento</th><th>Parcela</th><th>Emissão</th><th>Vencimento</th><th>Valor Compra</th><th>Valor Parcela</th><th>Situação</th></tr></thead>
-          <tbody>${docRows}</tbody></table>
-        </div>`;
+        cliHTML += '<div class="cli-block">'
+          + '<div class="cli-header"><span>' + cli + '</span><span>' + cliData.compras.length + ' compra' + (cliData.compras.length !== 1 ? 's' : '') + '</span></div>'
+          + '<table><thead><tr><th>Documento</th><th>Parcela</th><th>Emissão</th><th>Vencimento</th><th>Valor Compra</th><th>Valor Parcela</th><th>Situação</th></tr></thead>'
+          + '<tbody>' + docRows + '</tbody></table>'
+          + '</div>';
       }
     }
 
@@ -3223,37 +3027,42 @@ function gerarPDF() {
     totalGeralARepassar += vendARepassar;
     totalGeralAberto += vendAberto;
 
-    html += `<div class="rep-block">
-      <div class="rep-header">
-        <div class="rep-name">${vend}</div>
-        <div class="rep-totais">
-          <span>Total: <strong>${fmtPDF(vendComissao)}</strong></span>
-          <span>Repassado: <strong style="color:#86efac">${fmtPDF(vendRepassado)}</strong></span>
-          <span>A Repassar: <strong style="color:#fde68a">${fmtPDF(vendARepassar)}</strong></span>
-          <span>Em Aberto: <strong style="color:#fca5a5">${fmtPDF(vendAberto)}</strong></span>
-        </div>
-      </div>
-      ${cliHTML}
-    </div>`;
+    const repBlock = doc.createElement('div');
+    repBlock.className = 'rep-block';
+    repBlock.innerHTML = '<div class="rep-header"><div class="rep-name">' + vend + '</div>'
+      + '<div class="rep-totais">'
+      + '<span>Total: <strong>' + fmtPDF(vendComissao) + '</strong></span>'
+      + '<span>Repassado: <strong style="color:#86efac">' + fmtPDF(vendRepassado) + '</strong></span>'
+      + '<span>A Repassar: <strong style="color:#fde68a">' + fmtPDF(vendARepassar) + '</strong></span>'
+      + '<span>Em Aberto: <strong style="color:#fca5a5">' + fmtPDF(vendAberto) + '</strong></span>'
+      + '</div></div>' + cliHTML;
+    doc.body.appendChild(repBlock);
   });
 
-  html += `<div class="resumo-total">
-    <div class="resumo-cell"><div class="resumo-label">Total Comissão</div><div class="resumo-val">${fmtPDF(totalGeralComissao)}</div></div>
-    <div class="resumo-cell"><div class="resumo-label">Já Repassado</div><div class="resumo-val green">${fmtPDF(totalGeralRepassado)}</div></div>
-    <div class="resumo-cell"><div class="resumo-label">A Repassar Agora</div><div class="resumo-val orange">${fmtPDF(totalGeralARepassar)}</div></div>
-    <div class="resumo-cell"><div class="resumo-label">Em Aberto</div><div class="resumo-val red">${fmtPDF(totalGeralAberto)}</div></div>
-  </div>
-  <div class="footer">
-    <span>Alvorada Motocicletas · Gestão de Comissões</span>
-    <span>Documento gerado em ${dataHoje} · Uso interno</span>
-  </div>
-  </body></html>`;
+  // Resumo total
+  const resumo = doc.createElement('div');
+  resumo.className = 'resumo-total';
+  resumo.innerHTML = '<div class="resumo-cell"><div class="resumo-label">Total Comissão</div><div class="resumo-val">' + fmtPDF(totalGeralComissao) + '</div></div>'
+    + '<div class="resumo-cell"><div class="resumo-label">Já Repassado</div><div class="resumo-val green">' + fmtPDF(totalGeralRepassado) + '</div></div>'
+    + '<div class="resumo-cell"><div class="resumo-label">A Repassar</div><div class="resumo-val orange">' + fmtPDF(totalGeralARepassar) + '</div></div>'
+    + '<div class="resumo-cell"><div class="resumo-label">Em Aberto</div><div class="resumo-val red">' + fmtPDF(totalGeralAberto) + '</div></div>';
+  doc.body.appendChild(resumo);
 
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
-  setTimeout(() => win.print(), 500);
+  // Footer
+  const footer = doc.createElement('div');
+  footer.className = 'footer';
+  footer.innerHTML = '<span>Alvorada Motocicletas · Gestão de Comissões</span><span>Documento gerado em ' + dataHoje + ' · Uso interno</span>';
+  doc.body.appendChild(footer);
+
+  // Serializa e abre
+  const serializer = new XMLSerializer();
+  const htmlStr = '<!DOCTYPE html>' + serializer.serializeToString(doc);
+  const blob = new Blob([new TextEncoder().encode(htmlStr)], {type: 'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  setTimeout(() => { if(win) win.print(); }, 800);
 }
+
 
 function fmtPDF(v) {
   const n = (v == null || isNaN(v)) ? 0 : v;
@@ -3318,7 +3127,7 @@ function exportarRepasses(periodo) {
     { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, per.replace(/[:\/\\?*\[\]]/g, '-').slice(0, 31));
+  XLSX.utils.book_append_sheet(wb, ws, per.replace(/[\/\\?*\[\]]/g, '-').slice(0, 31));
   XLSX.writeFile(wb, `comissoes_${per.replace(/[^a-z0-9]/gi,'_')}.xlsx`);
   } catch(e) { alert('Erro na exportação: ' + e.message); }
 }
